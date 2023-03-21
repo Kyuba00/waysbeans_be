@@ -97,7 +97,7 @@ func (h *handlerUser) UpdateUser(c echo.Context) error {
 	cld, _ := cloudinary.NewFromParams(CLOUD_NAME, API_KEY, API_SECRET)
 
 	// UPLOAD FILE TO CLOUDINARY
-	respImage, _ := cld.Upload.Upload(ctx, filePath, uploader.UploadParams{Folder: "waysbeans"})
+	respImage, _ := cld.Upload.Upload(ctx, filePath, uploader.UploadParams{Folder: "uploads"})
 
 	var requestImage string
 	if respImage == nil {
