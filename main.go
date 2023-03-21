@@ -21,7 +21,7 @@ func main() {
 	e := echo.New()
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"https://waysbeans-99.vercel.app/", "https://waysbeans-fe-git-main-kyuba00.vercel.app/", "https://waysbeans-f0859gxhq-kyuba00.vercel.app/"},
+		AllowOrigins: []string{"https://waysbeans-99.vercel.app", "https://waysbeans-fe-git-main-kyuba00.vercel.app", "https://waysbeans-f0859gxhq-kyuba00.vercel.app"},
 		AllowMethods: []string{echo.GET, echo.POST, echo.PATCH, echo.DELETE},
 		AllowHeaders: []string{"X-Requested-With", "Content-Type", "Authorization"},
 	}))
