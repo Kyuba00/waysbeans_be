@@ -20,14 +20,14 @@ func main() {
 
 	e := echo.New()
 
-	mysql.DatabaseInit()
-	database.RunMigration()
-
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"https://waysbeans-f0859gxhq-kyuba00.vercel.app"},
+		AllowOrigins: []string{"*", "https://waysbeans-99.vercel.app"},
 		AllowMethods: []string{echo.GET, echo.POST, echo.PATCH, echo.DELETE},
 		AllowHeaders: []string{"X-Requested-With", "Content-Type", "Authorization"},
 	}))
+	
+	mysql.DatabaseInit()
+	database.RunMigration()
 
 	routes.RouteInit(e.Group("/api/v1"))
 
