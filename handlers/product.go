@@ -95,7 +95,7 @@ func (h *handlerProduct) CreateProduct(c echo.Context) error {
 	cld, _ := cloudinary.NewFromParams(CLOUD_NAME, API_KEY, API_SECRET)
 
 	// Upload file to Cloudinary ...
-	resp, err := cld.Upload.Upload(ctx, filePath, uploader.UploadParams{Folder: "waysbeans"})
+	resp, err := cld.Upload.Upload(ctx, filePath, uploader.UploadParams{Folder: "uploads"})
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -165,7 +165,7 @@ func (h *handlerProduct) UpdateProduct(c echo.Context) error {
 	cld, _ := cloudinary.NewFromParams(CLOUD_NAME, API_KEY, API_SECRET)
 
 	// Upload file to Cloudinary ...
-	resp, err := cld.Upload.Upload(ctx, filePath, uploader.UploadParams{Folder: "waysbeans"})
+	resp, err := cld.Upload.Upload(ctx, filePath, uploader.UploadParams{Folder: "uploads"})
 	if err != nil {
 		fmt.Println(err.Error())
 	}
