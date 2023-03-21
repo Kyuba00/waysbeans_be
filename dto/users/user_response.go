@@ -1,11 +1,20 @@
-package usersdto
+package userdto
 
 type UserResponse struct {
 	ID       int    `json:"id"`
-	Name     string `json:"name" form:"name" validate:"required"`
-	Email    string `json:"email" form:"email" validate:"required"`
-	Password string `json:"password" form:"password" validate:"required"`
-	Status   string `json:"status" form:"status"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Image    string `json:"image"`
+	Phone    string `json:"phone"`
+	Address  string `json:"address"`
+}
+
+type UpdateUserResponse struct {
+	Name    string `json:"name"`
+	Image   string `json:"image"`
+	Phone   string `json:"phone"`
+	Address string `json:"address"`
 }
 
 type DeleteUserResponse struct {

@@ -1,10 +1,15 @@
 package productdto
 
-type UpdateProductRequest struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Price int    `json:"price"`
-	Image string `json:"image"`
-	Stock int    `json:"stock"`
-	Desc  string `json:"desc"`
+type ProductResponse struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Price       int    `json:"price"`
+	Description string `json:"description"`
+	Image       string `json:"image"`
+	Stock       int    `json:"stock"`
+}
+
+type DeleteProductResponse struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }

@@ -3,12 +3,12 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 	cartdto "waysbeans_be/dto/cart"
 	dto "waysbeans_be/dto/result"
 	"waysbeans_be/models"
 	"waysbeans_be/repositories"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
 )
@@ -21,143 +21,149 @@ func HandlerCart(CartRepository repositories.CartRepository) *handlerCart {
 	return &handlerCart{CartRepository}
 }
 
-func (h *handlerCart) FindCart(c echo.Context) error {
-	carts, err := h.CartRepository.FindCarts()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
+func (h *handlerCart) CreateCart(c echo.Context) error {
+	// GET USER ROLE FROM JWT TOKEN
+	userInfo := c.Get("userInfo").(jwt.MapClaims)
+	userID := int(userInfo["id"].(float64))
+
+	// GET REQUEST AND DECODING JSON
+	cartRequest := new(cartdto.CartRequest)
+	if err := c.Bind(cartRequest); err != nil {
+		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
 	}
 
-	return c.JSON(http.StatusOK, dto.SuccessResult{Code: http.StatusOK, Data: carts})
-}
-
-func (h *handlerCart) GetCart(c echo.Context) error {
-	id, err := strconv.Atoi(c.Param("id"))
+	// RUN REPOSITORY GET PRODUCT BY PRODUCT ID
+	product, err := h.CartRepository.GetProductCartByID(int(cartRequest.ProductID))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
 	}
 
-	cart, err := h.CartRepository.GetCart(id)
+	// FIND TOTAL PRICE PRODUCT FROM QUANTITY REQUEST
+	total := product.Price * cartRequest.Quantity
+
+	// RUN REPOSITORY GET TRANSACTION BY USER ID
+	userTransaction, err := h.CartRepository.GetCartTransactionByUserID(userID)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
+		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
 	}
 
-	return c.JSON(http.StatusOK, dto.SuccessResult{Code: http.StatusOK, Data: cart})
+	// CHECK IF EXIST
+	if userTransaction.ID == 0 {
+		// SETUP FOR QUERY TRANSACTION
+		transaction := models.Transaction{
+			ID:       int(time.Now().Unix()),
+			UserID:   userID,
+			Status:   "waiting",
+			Total:    0,
+			CreateAt: time.Now(),
+			UpdateAt: time.Now(),
+		}
+
+		// RUN REPOSITORY CREATE TRANSACTION
+		transactionData, err := h.CartRepository.CreateTransaction(transaction)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
+		}
+
+		// SETUP FOR QUERY CART
+		cart := models.Cart{
+			UserID:        userID,
+			ProductID:     cartRequest.ProductID,
+			Product:       models.Product{},
+			OrderQty:      cartRequest.Quantity,
+			Subtotal:      total,
+			TransactionID: transactionData.ID,
+			CreateAt:      time.Now(),
+		}
+
+		// RUN REPOSITORY CREATE CART
+		data, err := h.CartRepository.CreateCart(cart)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
+		}
+
+		dataResponse, _ := h.CartRepository.GetCart(int(data.ID))
+
+		// WRITE RESPONSE
+		return c.JSON(http.StatusOK, dto.SuccessResult{Code: "success", Data: dataResponse})
+	} else {
+		// SETUP FOR QUERY CART
+		cart := models.Cart{
+			UserID:        userID,
+			ProductID:     cartRequest.ProductID,
+			Product:       models.Product{},
+			OrderQty:      cartRequest.Quantity,
+			Subtotal:      total,
+			TransactionID: userTransaction.ID,
+			CreateAt:      time.Now(),
+		}
+
+		// RUN REPOSITORY CREATE CART
+		data, err := h.CartRepository.CreateCart(cart)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
+		}
+
+		dataResponse, _ := h.CartRepository.GetCart(int(data.ID))
+
+		// WRITE RESPONSE
+		return c.JSON(http.StatusOK, dto.SuccessResult{Code: "success", Data: dataResponse})
+	}
 }
 
-func (h *handlerCart) CreateCart(c echo.Context) error {
-	requestCart := new(cartdto.CartRequest)
+func (h *handlerCart) DeleteCart(c echo.Context) error {
+	// GET CART ID FROM URL
+	cartID, _ := strconv.Atoi(c.Param("id"))
 
-	//untuk validasi bahwa data sudah dikirim atau belum
-	if err := c.Bind(requestCart); err != nil {
+	// GET USER ROLE FROM JWT TOKEN
+	userInfo := c.Get("userInfo").(jwt.MapClaims)
+	userID := int(userInfo["id"].(float64))
+
+	// GET CART
+	cart, err := h.CartRepository.GetCart(cartID)
+	if err != nil {
 		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
 		return c.JSON(http.StatusBadRequest, response)
 	}
 
-	//untuk validasi untuk pengecekan keamanan
-	validation := validator.New()
-	err := validation.Struct(requestCart)
+	// VALIDATE REQUEST BY USER ID
+	if userID != int(cart.UserID) {
+		response := dto.ErrorResult{Code: http.StatusUnauthorized, Message: "unauthorized"}
+		return c.JSON(http.StatusUnauthorized, response)
+	}
+
+	// DELETE DATA
+	data, err := h.CartRepository.DeleteCart(cart)
 	if err != nil {
 		response := dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 
-	// get data user token
-	userInfo := c.Get("userInfo").(jwt.MapClaims)
-	userId := int(userInfo["id"].(float64))
-
-	//untuk pengecekan ke dalam repository
-	transaction, err := h.CartRepository.GetTransactionID(userId)
-
-	//Untuk mengakali data yang akan kita kirimkan sesuai kebutuhan. Data yang diambil berasal dari (models.Product)
-	cart := models.Cart{
-		Qty:           1,
-		ProductID:     requestCart.ProductID,
-		SubAmount:     requestCart.SubAmount,
-		TransactionID: transaction.ID,
-	}
-
-	//untuk validasi untuk pengecekan keamanan
-	validator := validator.New()
-	err2 := validator.Struct(cart)
-	if err2 != nil {
-		response := dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-
-	data, err := h.CartRepository.CreateCart(cart)
-	if err != nil {
-		response := dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-
-	response := dto.SuccessResult{Code: http.StatusOK, Data: data}
+	// WRITE RESPONSE
+	response := dto.SuccessResult{Code: "success", Data: data}
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h *handlerCart) GetTransactionID(c echo.Context) error {
+func (h *handlerCart) FindCartByTransactionID(c echo.Context) error {
+	// GET USER ROLE FROM JWT TOKEN
 	userInfo := c.Get("userInfo").(jwt.MapClaims)
-	userId := int(userInfo["id"].(float64))
+	userID := int(userInfo["id"].(float64))
 
-	cart, err := h.CartRepository.GetTransactionID(userId)
+	// RUN REPOSITORY GET TRANSACTION BY USER ID
+	transaction, err := h.CartRepository.GetCartTransactionByUserID(userID)
 	if err != nil {
 		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
-		return c.JSON(http.StatusInternalServerError, response)
+		return c.JSON(http.StatusBadRequest, response)
 	}
 
-	response := dto.SuccessResult{Code: http.StatusOK, Data: cart}
+	// RUN REPOSITORY FIND CARTS BY TRANSACTION ID
+	carts, err := h.CartRepository.FindCartByTransactionID(int(transaction.ID))
+	if err != nil {
+		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
+		return c.JSON(http.StatusBadRequest, response)
+	}
+
+	// WRITE RESPONSE
+	response := dto.SuccessResult{Code: "success", Data: carts}
 	return c.JSON(http.StatusOK, response)
-}
-
-func (h *handlerCart) DeleteCart(c echo.Context) error {
-	id, _ := strconv.Atoi(c.Param("id"))
-
-	cart, err := h.CartRepository.GetCart(id)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
-	}
-
-	data, err := h.CartRepository.DeleteCart(cart, id)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
-	}
-
-	return c.JSON(http.StatusOK, dto.SuccessResult{Code: http.StatusOK, Data: convertResponseCart(data)})
-}
-
-func (h *handlerCart) UpdateCart(c echo.Context) error {
-	id, _ := strconv.Atoi(c.Param("id"))
-
-	request := new(cartdto.CartUpdate)
-	if err := c.Bind(request); err != nil {
-		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
-	}
-
-	cart, err := h.CartRepository.GetCart(id)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
-	}
-
-	if request.Qty != 0 {
-		cart.Qty = request.Qty
-	}
-
-	if request.SubAmount != 0 {
-		cart.SubAmount = request.SubAmount
-	}
-
-	updatedCart, err := h.CartRepository.UpdateCart(cart, id)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
-	}
-
-	return c.JSON(http.StatusOK, dto.SuccessResult{Code: http.StatusOK, Data: updatedCart})
-}
-
-func convertResponseCart(u models.Cart) models.CartResponse {
-	return models.CartResponse{
-		ID:        u.ID,
-		ProductID: u.ProductID,
-		Product:   u.Product,
-		SubAmount: u.SubAmount,
-	}
 }

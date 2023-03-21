@@ -9,13 +9,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func CartRoutes(r *echo.Group) {
+func CartRoutes(e *echo.Group) {
 	cartRepository := repositories.RepositoryCart(mysql.DB)
 	h := handlers.HandlerCart(cartRepository)
 
-	r.GET("/carts", h.FindCart)
-	r.GET("/cart/:id", h.GetCart)
-	r.POST("/cart", middleware.Auth(h.CreateCart))
-	r.DELETE("/cart/:id", h.DeleteCart)
-	r.PATCH("/cart/:id", middleware.Auth(h.UpdateCart))
+	e.POST("/cart", middleware.Auth(h.CreateCart))
+	e.DELETE("/cart/:id", h.DeleteCart)
+	e.GET("user/cart", h.FindCartByTransactionID)
 }

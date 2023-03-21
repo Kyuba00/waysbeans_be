@@ -46,7 +46,9 @@ func (h *handlerAuth) Register(c echo.Context) error {
 		Name:     request.Name,
 		Email:    request.Email,
 		Password: password,
-		Status:   "buyer",
+		Role:     "buyer",
+		CreateAt: time.Now(),
+		UpdateAt: time.Now(),
 	}
 
 	data, err := h.AuthRepository.Register(user)
@@ -54,7 +56,13 @@ func (h *handlerAuth) Register(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
 	}
 
-	return c.JSON(http.StatusOK, dto.SuccessResult{Code: http.StatusOK, Data: data})
+	registerResponse := authdto.RegisterResponse{
+		ID:    data.ID,
+		Name:  data.Name,
+		Email: data.Email,
+	}
+
+	return c.JSON(http.StatusOK, dto.SuccessResult{Code: "Success", Data: registerResponse})
 }
 
 func (h *handlerAuth) Login(c echo.Context) error {
@@ -64,13 +72,8 @@ func (h *handlerAuth) Login(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, response)
 	}
 
-	user := models.User{
-		Email:    request.Email,
-		Password: request.Password,
-	}
-
 	// Check email
-	user, err := h.AuthRepository.Login(user.Email)
+	user, err := h.AuthRepository.Login(request.Email)
 	if err != nil {
 		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
 		return c.JSON(http.StatusBadRequest, response)
@@ -85,7 +88,8 @@ func (h *handlerAuth) Login(c echo.Context) error {
 
 	//generate token
 	claims := jwt.MapClaims{}
-	claims["id"] = user.ID                               //bisa digunakan untuk payload
+	claims["id"] = user.ID
+	claims["role"] = user.Role                           //bisa digunakan untuk payload
 	claims["exp"] = time.Now().Add(time.Hour * 2).Unix() // 2 hours expired
 
 	token, errGenerateToken := jwtToken.GenerateToken(&claims)
@@ -96,13 +100,14 @@ func (h *handlerAuth) Login(c echo.Context) error {
 	}
 
 	loginResponse := authdto.LoginResponse{
-		Email:    user.Email,
-		Password: user.Password,
-		Token:    token,
-		Status:   user.Status,
+		ID:    user.ID,
+		Name:  user.Name,
+		Email: user.Email,
+		Role:  user.Role,
+		Token: token,
 	}
 
-	response := dto.SuccessResult{Code: http.StatusOK, Data: loginResponse}
+	response := dto.SuccessResult{Code: "Success", Data: loginResponse}
 	return c.JSON(http.StatusOK, response)
 }
 
@@ -111,19 +116,19 @@ func (h *handlerAuth) CheckAuth(c echo.Context) error {
 	userId := int(userInfo["id"].(float64))
 
 	//Check User by Id
-	user, err := h.AuthRepository.GetUser(userId)
+	user, err := h.AuthRepository.GetUserAuth(userId)
 	if err != nil {
 		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
 		return c.JSON(http.StatusBadRequest, response)
 	}
 
 	CheckAuthResponse := authdto.CheckAuthResponse{
-		Id:     user.ID,
-		Name:   user.Name,
-		Email:  user.Email,
-		Status: user.Status,
+		ID:    user.ID,
+		Name:  user.Name,
+		Email: user.Email,
+		Role:  user.Role,
 	}
 
-	response := dto.SuccessResult{Code: http.StatusOK, Data: CheckAuthResponse}
+	response := dto.SuccessResult{Code: "Success", Data: CheckAuthResponse}
 	return c.JSON(http.StatusOK, response)
 }

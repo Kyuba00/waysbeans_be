@@ -9,12 +9,10 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func UserRoutes(r *echo.Group) {
+func UserRoutes(e *echo.Group) {
 	userRepository := repositories.RepositoryUser(mysql.DB)
 	h := handlers.HandlerUser(userRepository)
-	r.GET("/users", h.FindUsers, middleware.Auth)
-	r.GET("/user/:id", h.GetUser, middleware.Auth)
-	r.POST("/user", h.CreateUser, middleware.Auth)
-	r.PATCH("/user/:id", h.UpdateUser, middleware.Auth)
-	r.DELETE("/user/:id", h.DeleteUser, middleware.Auth)
+
+	e.GET("/user", h.GetUser, middleware.Auth)
+	e.PATCH("/user", h.UpdateUser, middleware.Auth, middleware.UploadFile)
 }

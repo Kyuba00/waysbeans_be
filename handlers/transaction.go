@@ -3,16 +3,15 @@ package handlers
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 	dto "waysbeans_be/dto/result"
 	transactiondto "waysbeans_be/dto/transaction"
 	"waysbeans_be/models"
 	"waysbeans_be/repositories"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/midtrans/midtrans-go"
@@ -35,155 +34,109 @@ func HandlerTransaction(TransactionRepository repositories.TransactionRepository
 }
 
 func (h *handlerTransaction) FindTransactions(c echo.Context) error {
-	transactions, err := h.TransactionRepository.FindTransactions()
+	// GET USER ROLE FROM JWT TOKEN
+	userInfo := c.Get("userInfo").(jwt.MapClaims)
+	userRole := userInfo["role"]
+
+	// CHECK ROLE ADMIN
+	if userRole != "admin" {
+		return c.JSON(http.StatusUnauthorized, dto.ErrorResult{Code: http.StatusUnauthorized, Message: "You're not admin"})
+	}
+
+	// RUN REPOSITORY FIND TRANSACTIONS
+	transaction, err := h.TransactionRepository.FindTransactions()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
 	}
 
-	return c.JSON(http.StatusOK, dto.SuccessResult{Code: http.StatusOK, Data: transactions})
+	// WRITE RESPONSE
+	return c.JSON(http.StatusOK, dto.SuccessResult{Code: "success", Data: transaction})
 }
 
-func (h *handlerTransaction) GetTransaction(c echo.Context) error {
+func (h *handlerTransaction) GetUserTransactionByUserID(c echo.Context) error {
+	// GET USER ID FROM JWT TOKEN
 	userInfo := c.Get("userInfo").(jwt.MapClaims)
-	transId := int(userInfo["id"].(float64))
+	userID := int(userInfo["id"].(float64))
 
-	transaction, err := h.TransactionRepository.GetTransaction(transId)
+	// RUN REPOSITORY GET TRANSACTION BY USER ID
+	transactions, err := h.TransactionRepository.GetUserTransactionByUserID(userID)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
+		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
 	}
 
-	response := dto.SuccessResult{Code: http.StatusOK, Data: transaction}
-	return c.JSON(http.StatusOK, response)
-}
-
-func (h *handlerTransaction) CreateTransaction(c echo.Context) error {
-	userInfo := c.Get("userInfo").(jwt.MapClaims)
-	idUser := int(userInfo["id"].(float64))
-
-	request := new(transactiondto.CreateTransaction)
-	if err := c.Bind(request); err != nil {
-		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
-		return c.JSON(http.StatusBadRequest, response)
-	}
-
-	validate := validator.New()
-	err := validate.Struct(request)
-	if err != nil {
-		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
-		return c.JSON(http.StatusBadRequest, response)
-	}
-
-	//Untuk menemukan id uniq secara acak. SUDAH MASUK MATERI PAYMENT GATEWAY(MIDTRANS)
-	var TransIdIsMatch = false
-	var TransactionId int
-	for !TransIdIsMatch {
-		TransactionId = idUser + rand.Intn(10000) - rand.Intn(100)
-		transactionData, _ := h.TransactionRepository.GetTransaction(TransactionId)
-		if transactionData.ID == 0 {
-			TransIdIsMatch = true
-		}
-	}
-
-	transaction := models.Transaction{
-		ID:     TransactionId,
-		UserID: idUser,
-		Status: "active",
-	}
-
-	statusCheck, _ := h.TransactionRepository.FindbyIDTransaction(idUser, "active")
-	if statusCheck.Status == "active" {
-		response := dto.SuccessResult{Code: http.StatusOK, Data: transaction}
-		return c.JSON(http.StatusOK, response)
-	} else {
-		data, _ := h.TransactionRepository.CreateTransaction(transaction)
-		response := dto.SuccessResult{Code: 200, Data: data}
-		return c.JSON(http.StatusOK, response)
-	}
-}
-
-func (h handlerTransaction) DeleteTransaction(c echo.Context) error {
-	id, _ := strconv.Atoi(c.Param("id"))
-	transaction, err := h.TransactionRepository.GetTransaction(id)
-	if err != nil {
-		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
-		return c.JSON(http.StatusBadRequest, response)
-	}
-
-	data, err := h.TransactionRepository.DeleteTransaction(transaction)
-	if err != nil {
-		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
-		return c.JSON(http.StatusBadRequest, response)
-	}
-
-	response := dto.SuccessResult{Code: http.StatusOK, Data: data}
-	return c.JSON(http.StatusOK, response)
+	// WRITE RESPONSE
+	return c.JSON(http.StatusOK, dto.SuccessResult{Code: "success", Data: transactions})
 }
 
 func (h *handlerTransaction) UpdateTransaction(c echo.Context) error {
+	// GET USER ID FROM JWT TOKEN
 	userInfo := c.Get("userInfo").(jwt.MapClaims)
-	idTrans := int(userInfo["id"].(float64))
+	userID := int(userInfo["id"].(float64))
 
-	request := new(transactiondto.UpdateTransaction)
+	// GET REQUEST AND DECODING JSON
+	request := new(transactiondto.TransactionRequest)
 	if err := c.Bind(request); err != nil {
 		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
 	}
 
-	transaction, err := h.TransactionRepository.FindbyIDTransaction(idTrans, "active")
+	// RUN REPOSITORY GET TRANSACTION BY USER ID
+	transaction, err := h.TransactionRepository.GetTransactionByUserID(userID)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
+		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: "Cart Failed!"})
 	}
 
-	if request.UserID != 0 {
-		transaction.UserID = request.UserID
+	// CHECK UPDATE VALUE
+	if request.Name != "" {
+		transaction.Name = request.Name
 	}
 
-	if request.Total != 0 {
-		transaction.Total = request.Total
+	if request.Email != "" {
+		transaction.Email = request.Email
 	}
 
-	if request.Status != "active" {
-		transaction.Status = request.Status
+	if request.Phone != "" {
+		transaction.Phone = request.Phone
 	}
 
-	dataTransactions, err := h.TransactionRepository.UpdateTransaction(transaction)
+	if request.Address != "" {
+		transaction.Address = request.Address
+	}
+
+	transaction.Status = "pending"
+	transaction.Total = request.Total
+	transaction.UpdateAt = time.Now()
+
+	// RUN REPOSITORY UPDATE TRANSACTION
+	_, err = h.TransactionRepository.UpdateTransaction(transaction)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, dto.ErrorResult{Code: http.StatusInternalServerError, Message: err.Error()})
+		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
 	}
+
+	// SETUP FOR MIDTRANS
+	DataSnap, _ := h.TransactionRepository.GetTransactionNotification(int(transaction.ID))
 
 	var s = snap.Client{}
 	s.New(os.Getenv("SERVER_KEY"), midtrans.Sandbox)
 
 	req := &snap.Request{
 		TransactionDetails: midtrans.TransactionDetails{
-			OrderID:  strconv.Itoa(dataTransactions.ID),
-			GrossAmt: int64(dataTransactions.Total),
+			OrderID:  strconv.Itoa(int(DataSnap.ID)),
+			GrossAmt: int64(DataSnap.Total),
 		},
 		CreditCard: &snap.CreditCardDetails{
 			Secure: true,
 		},
 		CustomerDetail: &midtrans.CustomerDetails{
-			FName: dataTransactions.User.Name,
-			Email: dataTransactions.User.Email,
+			FName: DataSnap.User.Name,
+			Email: DataSnap.User.Email,
 		},
 	}
 
+	// RUN MIDTRANS SNAP
 	snapResp, _ := s.CreateTransaction(req)
 
-	return c.JSON(http.StatusOK, dto.SuccessResult{Code: http.StatusOK, Data: snapResp})
-}
-
-func (h *handlerTransaction) FindbyIDTransaction(c echo.Context) error {
-	userInfo := c.Get("userInfo").(jwt.MapClaims)
-	userId := int(userInfo["id"].(float64))
-
-	transaction, err := h.TransactionRepository.FindbyIDTransaction(userId, "active")
-	if err != nil {
-		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
-		return c.JSON(http.StatusBadRequest, response)
-	}
-
-	response := dto.SuccessResult{Code: http.StatusOK, Data: transaction}
-	return c.JSON(http.StatusOK, response)
+	// WRITE RESPONSE
+	return c.JSON(http.StatusOK, dto.SuccessResult{Code: "Success", Data: snapResp})
 }
 
 func (h *handlerTransaction) Notification(c echo.Context) error {
@@ -196,38 +149,39 @@ func (h *handlerTransaction) Notification(c echo.Context) error {
 
 	transactionStatus := notificationPayload["transaction_status"].(string)
 	fraudStatus := notificationPayload["fraud_status"].(string)
-	orderId := notificationPayload["order_id"].(string)
-	transaction, _ := h.TransactionRepository.GetOneTransaction(orderId)
+	orderID := notificationPayload["order_id"].(string)
+
+	transaction, _ := h.TransactionRepository.GetTransactionMidtrans(orderID)
 
 	if transactionStatus == "capture" {
 		if fraudStatus == "challenge" {
 			// TODO set transaction status on your database to 'challenge'
 			// e.g: 'Payment status challenged. Please take action on your Merchant Administration Portal
-			h.TransactionRepository.UpdateTransactions("pending", orderId)
+			h.TransactionRepository.UpdateTransactionMidtrans("pending", transaction.ID)
 		} else if fraudStatus == "accept" {
 			// TODO set transaction status on your database to 'success'
 			SendMail("success", transaction)
-			h.TransactionRepository.UpdateTransactions("success", orderId)
+			h.TransactionRepository.UpdateTransactionMidtrans("success", transaction.ID)
 		}
 	} else if transactionStatus == "settlement" {
 		// TODO set transaction status on your databaase to 'success'
 		SendMail("success", transaction)
-		h.TransactionRepository.UpdateTransactions("success", orderId)
+		h.TransactionRepository.UpdateTransactionMidtrans("success", transaction.ID)
 	} else if transactionStatus == "deny" {
 		// TODO you can ignore 'deny', because most of the time it allows payment retries
 		// and later can become success
 		SendMail("failed", transaction)
-		h.TransactionRepository.UpdateTransactions("failed", orderId)
+		h.TransactionRepository.UpdateTransactionMidtrans("failed", transaction.ID)
 	} else if transactionStatus == "cancel" || transactionStatus == "expire" {
 		// TODO set transaction status on your databaase to 'failure'
 		SendMail("failed", transaction) // Call SendMail function ...
-		h.TransactionRepository.UpdateTransactions("failed", orderId)
+		h.TransactionRepository.UpdateTransactionMidtrans("failed", transaction.ID)
 	} else if transactionStatus == "pending" {
 		// TODO set transaction status on your databaase to 'pending' / waiting payment
-		h.TransactionRepository.UpdateTransactions("pending", orderId)
+		h.TransactionRepository.UpdateTransactionMidtrans("pending", transaction.ID)
 	}
 
-	return c.NoContent(http.StatusOK)
+	return c.JSON(http.StatusOK, dto.SuccessResult{Code: "Success", Data: notificationPayload})
 }
 
 func SendMail(status string, transaction models.Transaction) {
@@ -284,15 +238,4 @@ func SendMail(status string, transaction models.Transaction) {
 		log.Println("Mail sent! to " + transaction.User.Email)
 
 	}
-}
-
-func (h *handlerTransaction) AllProductById(c echo.Context) error {
-	userId := int(c.Get("userInfo").(jwt.MapClaims)["id"].(float64))
-
-	transactions, err := h.TransactionRepository.AllProductById(userId)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()})
-	}
-
-	return c.JSON(http.StatusOK, dto.SuccessResult{Code: 200, Data: transactions})
 }
